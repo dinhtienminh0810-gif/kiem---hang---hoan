@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kiểm hàng hoàn kho</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 16px; background: #f5f5f5; }
+    h2 { text-align: center; }
+    .box { background: white; padding: 16px; border-radius: 12px; }
+    input, select, button { width: 100%; box-sizing: border-box; padding: 12px; margin: 8px 0 14px; font-size: 16px; }
+    button { border: 0; border-radius: 8px; background: #176b45; color: white; }
+    #status { white-space: pre-wrap; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h2>Kiểm hàng hoàn kho</h2>
+  <div class="box">
+    <button type="button" onclick="batQuet()">Quét mã vạch / QR</button>
+    <div id="reader"></div>
+
+    <label>Mã vận đơn thực tế</label>
+    <input id="ma" placeholder="Quét mã để điền tự động">
+
+    <label>Mã vận đơn gốc (nếu biết)</label>
+    <input id="goc" placeholder="Để trống nếu chưa xác định">
+
+    <label>Tình trạng hàng</label>
+    <select id="tinhTrang">
+      <option value="">-- Chọn tình trạng --</option>
+      <option>Nguyên vẹn</option>
+      <option>Móp hộp</option>
+      <option>Rách / vỡ bao bì</option>
+      <option>Thiếu sản phẩm</option>
+      <option>Sai sản phẩm</option>
+      <option>Hàng hư hỏng</option>
+      <option>Khác</option>
+    </select>
+
+    <button type="button" onclick="luu()">Lưu kiểm hàng</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    let scanner = null;
+    let dangQuet = false;
+
+    async function batQuet() {
+      const status = document.getElementById("status");
+      if (typeof Html5Qrcode === "undefined") {
+        status.textContent = "Không tải được thư viện quét mã. Hãy kiểm tra Internet.";
+        return;
+      }
+      if (dangQuet) return;
+      dangQuet = true;
+      scanner = new Html5Qrcode("reader");
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 260, height: 150 } },
+          async (text) => {
+            document.getElementById("ma").value = text.trim();
+            await dungQuet();
+            status.textContent = "Đã đọc mã. Hãy chọn tình trạng hàng.";
+          },
+          () => {}
+        );
+        status.textContent = "Đưa camera vào mã vạch hoặc QR.";
+      } catch (e) {
+        dangQuet = false;
+        status.textContent = "Lỗi camera: " + (e.message || e);
+      }
+    }
+
+    async function dungQuet() {
+      if (scanner && dangQuet) {
+        try { await scanner.stop(); } catch (e) {}
+        try { scanner.clear(); } catch (e) {}
+      }
+      dangQuet = false;
+    }
+
+    async function luu() {
+      const ma = document.getElementById("ma").value.trim();
+      const goc = document.getElementById("goc").value.trim();
+      const tinhTrang = document.getElementById("tinhTrang").value;
+      const status = document.getElementById("status");
+
+      if (!ma || !tinhTrang) {
+        status.textContent = "Vui lòng nhập mã vận đơn và chọn tình trạng hàng.";
+        return;
+      }
+
+      status.textContent = "Đang lưu...";
+      try {
+        const response = await fetch("DAN_DUONG_DAN_APPS_SCRIPT_WEB_APP_VAO_DAY", {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ maVanDon: ma, maGoc: goc, tinhTrang: tinhTrang })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Không lưu được dữ liệu.");
+        status.textContent = result.message || "Đã lưu kiểm hàng.";
+        document.getElementById("ma").value = "";
+        document.getElementById("goc").value = "";
+        document.getElementById("tinhTrang").value = "";
+      } catch (e) {
+        status.textContent = "Lỗi lưu dữ liệu: " + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
